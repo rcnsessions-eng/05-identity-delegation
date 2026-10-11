@@ -1,0 +1,20 @@
+[project]
+name = "learning-identity-delegation"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["PyJWT[crypto]==2.15.1", "cryptography==50.0.2", "httpx==0.28.1"]
+
+[tool.ruff]
+line-length = 96
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "learning_tools"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+cache_dir = "/tmp/mypy-prd05"

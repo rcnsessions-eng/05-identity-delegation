@@ -1,0 +1,108 @@
+name: zero-trust-identity-delegation
+services:
+  gateway:
+    image: zero-trust-identity-delegation-gateway:0.1.0
+    build:
+      context: ../..
+      dockerfile: 05-identity-delegation/code/Dockerfile
+      target: runtime
+    ports: ["127.0.0.1:${LEARNING_PORT:-8225}:8000"]
+    environment:
+      LEARNING_ISSUER: "http://localhost:${LEARNING_IDP_PORT:-8425}/realms/learning"
+      LEARNING_JWKS_URL: http://keycloak:8080/realms/learning/protocol/openid-connect/certs
+      OPA_URL: http://opa:8181
+    depends_on:
+      keycloak: {condition: service_healthy}
+      opa: {condition: service_healthy}
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7@sha256:4388e2379b7e870a447adbe7b80bd61f5fbf04e925832b19669fda4957f05a81
+    command: [start-dev, --import-realm, --db=dev-file]
+    ports: ["127.0.0.1:${LEARNING_IDP_PORT:-8425}:8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${LEARNING_ADMIN_PASSWORD:?Run scripts/setup_env.py}"
+      KC_HOSTNAME: "http://localhost:${LEARNING_IDP_PORT:-8425}"
+      KC_HEALTH_ENABLED: "true"
+      LEARNING_DEMO_PASSWORD: "${LEARNING_DEMO_PASSWORD:?Run scripts/setup_env.py}"
+      LEARNING_AGENT_SECRET: "${LEARNING_AGENT_SECRET:?Run scripts/setup_env.py}"
+    volumes: ["./keycloak/learning-realm.json:/opt/keycloak/data/import/learning-realm.json:ro"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    healthcheck:
+      test: [CMD-SHELL, "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; read -r line <&3; [[ $$line == *'200'* ]]"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+  opa:
+    image: openpolicyagent/opa:1.21.1-static@sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e
+    command: [run, --server, --addr=0.0.0.0:8181, --log-level=error, /read-policy, /write-policy]
+    volumes:
+      - ../../02-opa-authorization/code/policy/rego:/read-policy:ro
+      - ../../04-mcp-constrained-tools/code/policy/rego:/write-policy:ro
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD, /opa, eval, --fail, --format=raw, 'http.send({"method":"GET","url":"http://127.0.0.1:8181/health","timeout":"1s"}).status_code == 200']
+      interval: 3s
+      timeout: 2s
+      retries: 10
+  mcp:
+    image: zero-trust-identity-delegation-gateway:0.1.0
+    command: [python, -m, app.identity.relay]
+    stdin_open: true
+    environment:
+      LEARNING_GATEWAY_URL: http://gateway:8000
+      LEARNING_USER_TOKEN: "${LEARNING_USER_TOKEN:-}"
+      LEARNING_WORKLOAD_TOKEN: "${LEARNING_WORKLOAD_TOKEN:-}"
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    profiles: [tools]
+  checks:
+    image: zero-trust-identity-delegation-checks:0.1.0
+    build:
+      context: ../..
+      dockerfile: 05-identity-delegation/code/Dockerfile
+      target: checks
+    profiles: [tools]
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+  smoke:
+    image: zero-trust-identity-delegation-gateway:0.1.0
+    command: [python, /identity-scripts/smoke.py]
+    environment:
+      LEARNING_GATEWAY_URL: http://gateway:8000
+      LEARNING_IDP_URL: http://keycloak:8080/realms/learning
+      LEARNING_DEMO_PASSWORD: "${LEARNING_DEMO_PASSWORD:?Run scripts/setup_env.py}"
+      LEARNING_AGENT_SECRET: "${LEARNING_AGENT_SECRET:?Run scripts/setup_env.py}"
+    profiles: [tools]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: "${LEARNING_SUBNET:-10.218.45.0/24}"

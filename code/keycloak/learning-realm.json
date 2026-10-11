@@ -1,0 +1,54 @@
+{
+  "realm": "learning",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 120,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "clientScopes": [
+    {"name":"content.search","protocol":"openid-connect","attributes":{"include.in.token.scope":"true"}},
+    {"name":"progress.read","protocol":"openid-connect","attributes":{"include.in.token.scope":"true"}},
+    {"name":"assessment.create","protocol":"openid-connect","attributes":{"include.in.token.scope":"true"}},
+    {"name":"evidence.record","protocol":"openid-connect","attributes":{"include.in.token.scope":"true"}},
+    {"name":"tools.invoke","protocol":"openid-connect","attributes":{"include.in.token.scope":"true"}}
+  ],
+  "clients": [
+    {
+      "clientId":"learning-client","enabled":true,"publicClient":true,
+      "protocol":"openid-connect","directAccessGrantsEnabled":true,
+      "standardFlowEnabled":true,"redirectUris":["http://localhost:8425/callback"],
+      "attributes":{"pkce.code.challenge.method":"S256"},
+      "defaultClientScopes":["content.search","progress.read","assessment.create","evidence.record"],
+      "protocolMappers":[{
+        "name":"user-subject","protocol":"openid-connect","protocolMapper":"oidc-sub-mapper",
+        "config":{"access.token.claim":"true","id.token.claim":"true","introspection.token.claim":"true"}
+      },{
+        "name":"learning-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper",
+        "config":{"included.custom.audience":"learning-gateway","access.token.claim":"true","id.token.claim":"false"}
+      }]
+    },
+    {
+      "clientId":"agent-adapter","enabled":true,"publicClient":false,
+      "secret":"${LEARNING_AGENT_SECRET}","protocol":"openid-connect",
+      "serviceAccountsEnabled":true,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,
+      "defaultClientScopes":["tools.invoke"],
+      "protocolMappers":[{
+        "name":"workload-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper",
+        "config":{"included.custom.audience":"learning-gateway-workload","access.token.claim":"true","id.token.claim":"false"}
+      }]
+    }
+  ],
+  "users": [
+    {"id":"a1000000-0000-4000-8000-000000000001","username":"learner-red-1","enabled":true,
+      "firstName":"Synthetic","lastName":"RedOne","email":"red1@example.invalid","emailVerified":true,
+      "credentials":[{"type":"password","value":"${LEARNING_DEMO_PASSWORD}","temporary":false}]},
+    {"id":"a1000000-0000-4000-8000-000000000002","username":"learner-red-2","enabled":true,
+      "firstName":"Synthetic","lastName":"RedTwo","email":"red2@example.invalid","emailVerified":true,
+      "credentials":[{"type":"password","value":"${LEARNING_DEMO_PASSWORD}","temporary":false}]},
+    {"id":"b1000000-0000-4000-8000-000000000001","username":"learner-blue-1","enabled":true,
+      "firstName":"Synthetic","lastName":"BlueOne","email":"blue1@example.invalid","emailVerified":true,
+      "credentials":[{"type":"password","value":"${LEARNING_DEMO_PASSWORD}","temporary":false}]},
+    {"id":"c1000000-0000-4000-8000-000000000001","username":"service-account-agent-adapter",
+      "enabled":true,"serviceAccountClientId":"agent-adapter"}
+  ]
+}
